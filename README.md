@@ -56,6 +56,7 @@ public async Task DeleteUserWithTransaction(int userId)
     }
 }
 
+
 =================================================================================================================================================
 
 public async Task CreateDealWithTransaction(PostDealDto dto)
@@ -91,7 +92,7 @@ public async Task CreateDealWithTransaction(PostDealDto dto)
         // na właściwy obiekt encji Deal, który rozumie Entity Framework i baza danych.
         var newDeal = new Deal
         {
-            UserId = dto.UserId,           // Powiązanie umowy z konkretnym użytkownikiem (Klucz obcy)
+            UserId = userId,           // Powiązanie umowy z konkretnym użytkownikiem (Klucz obcy)
             Description = dto.Description,
             DateFrom = dto.DateFrom,
             DateTo = dto.DateTo
@@ -117,3 +118,43 @@ public async Task CreateDealWithTransaction(PostDealDto dto)
     }
 }
 
+=======================================================
+
+
+public async Task<Deal> CreateDealAsync(PostDealDto dto)
+    {
+        // 1. Transakcja
+        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            // 2. Walidacja: Id bierzemy z wnętrza DTO
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == dto.UserId);
+            if (user is null)
+                throw new NotFoundException($"User with ID {dto.UserId} not found.");
+
+            // 3. Mapowanie DTO -> Encja bazodanowa
+            var newDeal = new Deal
+            {
+                UserId = dto.UserId,
+                Description = dto.Description,
+                DateFrom = dto.DateFrom,
+                DateTo = dto.DateTo
+            };
+
+            // 4. Dodanie do bazy
+            _context.Deals.Add(newDeal);
+            await _context.SaveChangesAsync();
+            
+            // Zatwierdzenie transakcji
+            await transaction.CommitAsync();
+
+            // Zwracamy stworzony obiekt (będzie miał już nadane nowe Id z bazy!)
+            return newDeal;
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync();
+            throw; // Rzucamy wyjątek dalej do kontrolera
+        }
+    }
